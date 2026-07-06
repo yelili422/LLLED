@@ -149,61 +149,6 @@ show_uninstall_options() {
     echo
 }
 
-# 停止服务
-echo "停止系统服务..."
-systemctl stop ugreen-led-monitor.service 2>/dev/null
-systemctl disable ugreen-led-monitor.service 2>/dev/null
-rm -f "$SERVICE_FILE"
-systemctl daemon-reload
-
-# 删除命令链接
-echo "删除LLLED命令..."
-rm -f "$COMMAND_LINK"
-
-# 删除安装目录
-echo "删除程序文件..."
-rm -rf "$INSTALL_DIR"
-
-# 清理其他可能的安装位置
-echo "清理其他位置..."
-rm -f /usr/bin/LLLED
-rm -f /bin/LLLED
-rm -rf /etc/ugreen-led-controller
-rm -rf /var/lib/ugreen-led-controller
-
-# 验证清理结果
-if command -v LLLED >/dev/null 2>&1; then
-    echo -e "${RED}警告: LLLED命令仍然可用，可能存在其他安装${NC}"
-    which LLLED
-else
-    echo -e "${GREEN}✓ LLLED已完全卸载${NC}"
-fi
-
-echo "卸载完成！"
-    echo "  1) 完全卸载 (删除所有文件)"
-    echo "  2) 保留配置卸载 (保留配置文件)"
-    echo "  3) 仅停用服务 (保留程序文件)"
-    echo "  0) 取消卸载"
-    echo
-    echo -ne "${YELLOW}请选择 [0-3]: ${NC}"
-    read -n 1 choice
-    echo
-    echo
-    
-    case "$choice" in
-        1) UNINSTALL_TYPE="complete" ;;
-        2) UNINSTALL_TYPE="keep-config" ;;
-        3) UNINSTALL_TYPE="disable-only" ;;
-        0) 
-            echo -e "${GREEN}卸载已取消${NC}"
-            exit 0
-            ;;
-        *)
-            echo -e "${RED}无效选择，卸载已取消${NC}"
-            exit 1
-            ;;
-    esac
-}
 
 # 停止并移除systemd服务
 remove_service() {
@@ -232,8 +177,14 @@ remove_service() {
 remove_command() {
     echo -e "${BLUE}移除LLLED命令链接...${NC}"
     
-    if [[ -L "$COMMAND_LINK" ]]; then
-        rm -f "$COMMAND_LINK"
+    local removed=false
+    for link in "${COMMAND_LINKS[@]}"; do
+        if [[ -L "$link" || -f "$link" ]]; then
+            rm -f "$link"
+            removed=true
+        fi
+    done
+    if [[ "$removed" == "true" ]]; then
         echo -e "${GREEN}✓ LLLED命令链接已移除${NC}"
     else
         echo -e "${YELLOW}  命令链接不存在${NC}"
@@ -379,9 +330,10 @@ show_uninstall_result() {
 
 # 主函数
 main() {
-    show_uninstall_info
+    show_header
     check_root
-    confirm_uninstall
+    check_installation_status
+    show_uninstall_options
     
     echo -e "${CYAN}开始卸载LLLED...${NC}"
     echo
